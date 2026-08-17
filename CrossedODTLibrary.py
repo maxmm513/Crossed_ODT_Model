@@ -116,62 +116,64 @@ def add_noise(Itot, SNR):
     return Itot + noise
 
 
-#%%
-from scipy.interpolate import RegularGridInterpolator
-
-def Slices_Horiz(X, Y, Z, POI):
-    y_vals = Y[:, 0]
-    x_vals = X[0, :]
-
-    interpolator = RegularGridInterpolator((y_vals, x_vals), Z, method='linear', bounds_error=False, fill_value=0)
-
-    slices = []
-    for y_pos in POI:
-        pts = np.column_stack((np.full_like(x_vals, y_pos), x_vals))
-        slice_vals = interpolator(pts)
-        slices.append(slice_vals)
-
-    return x_vals, np.array(slices)
-
-
-def Slices_Vert(X, Y, Z, POI):
-
-    y_vals = Y[:, 0]
-    x_vals = X[0, :]
-
-    interpolator = RegularGridInterpolator((y_vals, x_vals), Z, method='linear', bounds_error=False, fill_value=0)
-
-    slices = []
-    for x_pos in POI:
-        pts = np.column_stack((y_vals, np.full_like(y_vals, x_pos)))
-        slice_vals = interpolator(pts)
-        slices.append(slice_vals)
-
-    return y_vals, np.array(slices)
-
-def Slices_Plot(vals, slices, POI, sliceType, scale=1):
+def Plot_Figure2DwithSlices(Z, x, y, POI_x=None, POI_y=None, levels=15):
     
-    slices = slices*scale
+    scale_um = 1e6
+    scale_uK = 1e6
     
-    plt.figure(figsize=(5, 4))
+    Z = Z*scale_uK
+    
+    x_positions = POI_x if POI_x is not None else []
+    y_positions = POI_y if POI_y is not None else []
 
-    for i, y_pos in enumerate(POI):
-        plt.plot(vals * 1e6, slices[i], label=f'y = {y_pos*1e6:.1f} $\mu$m')
+    # map POI values to nearest array indices
+    x_indices = [np.argmin(np.abs(x - pos)) for pos in x_positions]
+    y_indices = [np.argmin(np.abs(y - pos)) for pos in y_positions]
+
+    # grid layout
+    fig = plt.figure(figsize=(8, 7))
+    gs = fig.add_gridspec(2, 3, width_ratios=[3, 1, 0.15], height_ratios=[1, 3], hspace=0.08, wspace=0.2)
+    ax_main  = fig.add_subplot(gs[1, 0])
+    ax_top   = fig.add_subplot(gs[0, 0], sharex=ax_main)
+    ax_right = fig.add_subplot(gs[1, 1], sharey=ax_main)
+    cax      = fig.add_subplot(gs[1, 2])  # axis for colorbar
+
+    # 2D contour
+    X, Y = np.meshgrid(x*scale_um, y*scale_um)
+    contour = ax_main.contourf(X, Y, Z, levels=levels, cmap='jet')
+
+    cbar = fig.colorbar(contour, cax=cax)
+    cbar.set_label('T ($\mu$K)')
+
+    # horiz slices
+    colors_y = plt.cm.autumn(np.linspace(0.2, 0.8, max(len(y_indices), 1)))
+    for idx, color in zip(y_indices, colors_y):
+        ax_top.plot(x*scale_um, Z[idx, :], color=color, lw=1.5, label=f'Y = {y[idx]*scale_um:.2f}')
+        ax_main.axhline(y[idx]*scale_um, color=color, linestyle='--', lw=1.2)
+
+    # vert slices
+    colors_x = plt.cm.winter(np.linspace(0.2, 0.8, max(len(x_indices), 1)))
+    for idx, color in zip(x_indices, colors_x):
+        ax_right.plot(Z[:, idx], y*scale_um, color=color, lw=1.5, label=f'X = {x[idx]*scale_um:.2f}')
+        ax_main.axvline(x[idx]*scale_um, color=color, linestyle='--', lw=1.2)
+
+    # formatting
+    ax_main.set_xlabel('x ($\mu$m)')
+    ax_main.set_ylabel('y ($\mu$m)')
     
-    if sliceType == 'horiz':
-        axis = 'x'
-        title = 'Horizontal slice'
-        
-    elif sliceType == 'vert':
-        axis = 'y'
-        title = 'Vertical slice'
-    
-    plt.xlabel(f'{axis} ($\mu$m)')
-    plt.ylabel('Temperature')
-    plt.title(title)
-    plt.legend()
-    # plt.grid(True)
-    plt.tight_layout()
+    ax_top.set_ylabel('T ($\mu$K)')
+    ax_top.tick_params(labelbottom=False)
+    if y_positions is not None: 
+        ax_top.legend(fontsize=8, loc='upper right')
+    ax_top.grid(True, alpha=0.3)
+
+    ax_right.set_xlabel('T ($\mu$K)')
+    ax_right.tick_params(labelleft=False)
+    if x_positions is not None: 
+        ax_right.legend(fontsize=8, loc='upper right')
+    ax_right.grid(True, alpha=0.3)
+
+    return fig, (ax_main, ax_top, ax_right)
     
 #%%
 
